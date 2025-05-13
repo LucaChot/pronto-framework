@@ -1,0 +1,66 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sched
+  namespace: kube-system
+  labels:
+    component: scheduler
+    tier: control-plane
+    name: pronto
+spec:
+  selector:
+    matchLabels:
+      component: scheduler
+      tier: control-plane
+      name: pronto
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        component: scheduler
+        tier: control-plane
+        name: pronto
+    spec:
+      terminationGracePeriodSeconds: 30
+      serviceAccountName: pronto-account
+      nodeSelector:
+        node-role.kubernetes.io/control-plane: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: NoSchedule
+      - key: "node-role.kubernetes.io/control-plane"
+        operator: "Exists"
+        effect: NoSchedule
+      containers:
+      - command:
+        - ./sched
+        - --config=/etc/kubernetes/pronto/pronto-config.yaml
+          #- --v=10
+        name: pronto
+        resources:
+          requests:
+            cpu: "0.1"
+        image: lucachot/sched-framework:latest
+        imagePullPolicy: Always
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 10259
+            scheme: HTTPS
+          initialDelaySeconds: 15
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 10259
+            scheme: HTTPS
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/kubernetes/pronto
+      volumes:
+      - name: config-volume
+        configMap:
+          name: pronto-config
+      restartPolicy: Always
+      imagePullSecrets:
+        - name: regcred

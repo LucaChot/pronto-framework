@@ -1,0 +1,77 @@
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pronto-account
+  namespace: kube-system
+---
+# ClusterRoleBinding - to default kube-scheduler role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pronto-as-kube-scheduler
+subjects:
+- kind: ServiceAccount
+  name: pronto-account
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: system:kube-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: pronto-as-volume-scheduler
+subjects:
+- kind: ServiceAccount
+  name: pronto-account
+  namespace: kube-system
+roleRef:
+  kind: ClusterRole
+  name: system:volume-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pronto-extension-apiserver-authentication-reader
+  namespace: kube-system
+roleRef:
+  kind: Role
+  name: extension-apiserver-authentication-reader
+  apiGroup: rbac.authorization.k8s.io
+subjects:
+- kind: ServiceAccount
+  name: pronto-account
+  namespace: kube-system
+# ClusterRoleBinding - to default volume-scheduler role
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#  name: my-controller-as-volume-scheduler
+#subjects:
+  #- kind: ServiceAccount
+    #  name: my-controller-account
+    #  namespace: dist-sched
+#roleRef:
+  #  kind: ClusterRole
+  #  name: system:volume-scheduler
+  #  apiGroup: rbac.authorization.k8s.io
+---
+# Currently do not have any use of a ConfigMap
+#apiVersion: v1
+#kind: ConfigMap
+#metadata:
+#  name: my-controller-config
+#  namespace: dist-sched
+#data:
+  #  my-controller-config.yaml: |
+    #    apiVersion: kubescheduler.config.k8s.io/v1beta2
+    #    kind: KubeSchedulerConfiguration
+    #    profiles:
+    #      - schedulerName: my-controller
+    #    leaderElection:
+    #      leaderElect: false
+---

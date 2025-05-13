@@ -1,0 +1,49 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pronto-config
+  namespace: kube-system
+data:
+  pronto-config.yaml: |
+    apiVersion: kubescheduler.config.k8s.io/v1
+    kind: KubeSchedulerConfiguration
+    leaderElection:
+      leaderElect: false
+    profiles:
+    - schedulerName: pronto
+      plugins:
+        # Disable default filter, enable yours
+        filter:
+          disabled:
+          - name: "*"
+          enabled:
+          - name: Pronto
+
+        # Disable default score, enable yours
+        score:
+          disabled:
+          - name: "*"
+          enabled:
+          - name: Pronto
+
+        # Disable default reserve, enable yours
+        reserve:
+          disabled:
+          - name: "*"
+          enabled:
+          - name: Pronto
+
+        # Disable default permit, enable yours
+        permit:
+          disabled:
+          - name: "*"
+
+        # Disable default preBind, enable yours
+        preBind:
+          disabled:
+          - name: "*"
+
+        # Disable default postBind, enable yours (if you have one)
+        postBind:
+          disabled:
+          - name: "*"
