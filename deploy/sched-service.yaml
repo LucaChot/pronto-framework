@@ -46,6 +46,22 @@ subjects:
 - kind: ServiceAccount
   name: pronto-account
   namespace: kube-system
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pronto-svc
+  namespace: kube-system
+spec:
+  clusterIP: None
+  selector:
+    component: scheduler
+    tier: control-plane
+    name: pronto
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 50051
 # ClusterRoleBinding - to default volume-scheduler role
 # apiVersion: rbac.authorization.k8s.io/v1
 # kind: ClusterRoleBinding

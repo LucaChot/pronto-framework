@@ -1,0 +1,67 @@
+---
+# ServiceAccount
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: central-sched-account
+  namespace: basic-sched
+---
+# ClusterRoleBinding - to default kube-scheduler role
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: central-sched-as-kube-scheduler
+subjects:
+- kind: ServiceAccount
+  name: central-sched-account
+  namespace: basic-sched
+roleRef:
+  kind: ClusterRole
+  name: system:kube-scheduler
+  apiGroup: rbac.authorization.k8s.io
+---
+# ClusterRoleBinding - to default volume-scheduler role
+# apiVersion: rbac.authorization.k8s.io/v1
+# kind: ClusterRoleBinding
+# metadata:
+#  name: my-controller-as-volume-scheduler
+#subjects:
+  #- kind: ServiceAccount
+    #  name: my-controller-account
+    #  namespace: dist-sched
+#roleRef:
+  #  kind: ClusterRole
+  #  name: system:volume-scheduler
+  #  apiGroup: rbac.authorization.k8s.io
+---
+# Currently do not have any use of a ConfigMap
+#apiVersion: v1
+#kind: ConfigMap
+#metadata:
+#  name: my-controller-config
+#  namespace: dist-sched
+#data:
+  #  my-controller-config.yaml: |
+    #    apiVersion: kubescheduler.config.k8s.io/v1beta2
+    #    kind: KubeSchedulerConfiguration
+    #    profiles:
+    #      - schedulerName: my-controller
+    #    leaderElection:
+    #      leaderElect: false
+---
+# Define a service for remote schedulers to DNS query address of central scheduler
+apiVersion: v1
+kind: Service
+metadata:
+  name: central-svc
+  namespace: basic-sched
+spec:
+  clusterIP: None
+  selector:
+    component: scheduler
+    tier: control-plane
+    name: central-sched
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 50051

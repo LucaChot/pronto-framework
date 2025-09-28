@@ -1,9 +1,8 @@
+protoc --go_out=. --go_opt=paths=source_relative \
+--go-grpc_out=. --go-grpc_opt=paths=source_relative message/message.proto
 go build  -o bin/sched main.go
 docker build -t lucachot/sched-framework:latest -f sched-framework-docker .
 #0 building with "default" instance using docker driver
-
-#1 [internal] load build definition from sched-framework-docker
-#1 DONE 0.0s
 
 #1 [internal] load build definition from sched-framework-docker
 #1 transferring dockerfile: 96B 0.0s done
@@ -26,26 +25,27 @@ docker build -t lucachot/sched-framework:latest -f sched-framework-docker .
 #5 DONE 0.0s
 
 #6 [internal] load build context
-#6 transferring context: 84.65MB 2.4s done
-#6 DONE 2.5s
+#6 transferring context: 85.80MB 1.5s done
+#6 DONE 1.6s
 
 #7 [2/3] WORKDIR /app
 #7 CACHED
 
 #8 [3/3] COPY ./bin/sched /app
-#8 CACHED
+#8 DONE 2.3s
 
 #9 exporting to image
-#9 exporting layers done
-#9 writing image sha256:73b4d39edef37d5432ddf7a4b79a52f35dc1cd2905e8dc7e5d0e525c57374529 done
-#9 naming to docker.io/lucachot/sched-framework:latest done
-#9 DONE 0.0s
+#9 exporting layers
+#9 exporting layers 0.7s done
+#9 writing image sha256:817f68cc554c3a3f492775b91e80bb464eed90699c8f7898a239126360f73b1f done
+#9 naming to docker.io/lucachot/sched-framework:latest 0.0s done
+#9 DONE 0.7s
 docker push lucachot/sched-framework:latest
 The push refers to repository [docker.io/lucachot/sched-framework]
-855451fce125: Preparing
+f1e88cca017c: Preparing
 181ce2d2de02: Preparing
 247fffb7158d: Preparing
 247fffb7158d: Layer already exists
 181ce2d2de02: Layer already exists
-855451fce125: Layer already exists
-latest: digest: sha256:a6b6e1c96f8186da1103cbfcd7fed58a7c038b722a9915ab3a811ab02361add3 size: 946
+f1e88cca017c: Pushed
+latest: digest: sha256:e0f9fd4ace70f8260da8da5b7968fb78718a3f6f04d843ac83d661b731f3d2e1 size: 946

@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
-	"strconv"
+	//"strconv"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -14,6 +14,23 @@ import (
 )
 
 const Name = "Pronto"
+
+type HostInfo struct {
+    Reserved        int
+    OverReserved    int
+	Signal          float64
+	Capacity        float64
+	Overprovision   float64
+}
+
+type BooleanState struct {
+    val bool
+}
+
+// Clone is required so CycleState can copy your data safely
+func (b *BooleanState) Clone() framework.StateData {
+    return &BooleanState{ val: b.val }
+}
 
 // ProntoPlugin implements a Score, Reserve, Unreserve plugin
 // that tracks a per-node signal using a Kalman filter and CycleState.
@@ -32,16 +49,19 @@ var _ framework.ReservePlugin = &ProntoPlugin{}
 func New(ctx context.Context, obj runtime.Object, handle framework.Handle) (framework.Plugin, error) {
 	logger := klog.FromContext(ctx).WithValues("plugin", Name)
 	pl := &ProntoPlugin{logger: logger, handle: handle}
-	pl.PodReserved = make(map[string]float64)
-	pl.HostReservations = make(map[string]float64)
+	pl.HostReservations = make(map[string]*HostInfo)
+	pl.PodReserved = make(map[string]struct{})
+	pl.PodOverReserved = make(map[string]struct{})
 
 	podInformer := handle.SharedInformerFactory().Core().V1().Pods()
-
 	podInformer.Informer().AddEventHandler(
 		cache.ResourceEventHandlerFuncs{
 			UpdateFunc: pl.onPodUpdate,
+            DeleteFunc: pl.onPodDelete,
 		},
 	)
+
+    pl.prontoState.startPlacementServer(ctx, logger)
 
 	return pl, nil
 }
@@ -57,21 +77,31 @@ func (pl *ProntoPlugin) Filter(ctx context.Context, state *framework.CycleState,
 		return framework.NewStatus(framework.Error, "node not found")
 	}
 
-    signal := extractSignalFromNode(node)
-    reserved := pl.GetNodeReservation(node.Name)
-    needed := extractPodCostFromNode(node)
-    //needed := 1e-3
+    hostInfo := pl.GetHost(node.Name)
+    if hostInfo == nil {
+        return framework.NewStatus(framework.Unschedulable,
+            fmt.Sprintf("Node %v does not exist", node.Name))
+    }
+
+    needed := 1e-3
 
     if logger.V(10).Enabled() {
-        logger.Info("Pronto Signal", "nodeName", node.Name, "reserved", reserved,
+        logger.Info("Pronto Signal", "Node Name", node.Name, "HostInfo", hostInfo,
             "needed", needed)
     }
 
-    if signal - reserved > needed {
+    if hostInfo.Capacity - float64(hostInfo.Reserved) > 1 {
+        state.Write(framework.StateKey(node.Name), &BooleanState{val: false})
         return framework.NewStatus(framework.Success, "")
     }
+
+    //if hostInfo.Overprovision - float64(hostInfo.OverReserved) > needed {
+        //state.Write(framework.StateKey(node.Name), &BooleanState{val: true})
+        //return framework.NewStatus(framework.Success, "")
+    //}
+
     return framework.NewStatus(framework.Unschedulable,
-        fmt.Sprintf("Node %v does not meet signal requirements: signal: %f reserved: %f needed: %f", node.Name, signal, reserved, needed))
+        fmt.Sprintf("Node %v does not meet signal requirements: capacity: %f reserved: %d", node.Name, hostInfo.Capacity, hostInfo.Reserved))
 }
 
 // Score reads the node signal, predicts via Kalman, subtracts reserved, and returns a score.
@@ -87,13 +117,12 @@ func (pl *ProntoPlugin) Score(ctx context.Context, state *framework.CycleState, 
 		return 0, framework.NewStatus(framework.Error, "node not found")
 	}
 
-    signal := extractSignalFromNode(node)
-    reserved := pl.GetNodeReservation(node.Name)
-    score := signalScorer(signal - reserved)
+    hostInfo := pl.GetHost(node.Name)
+    score := signalScorer(hostInfo.Capacity)
 
     if logger.V(10).Enabled() {
         logger.Info("Pronto Signal", "podName", pod.Name, "nodeName", node.Name, "scorer", Name,
-            "signal", signal, "reserved", reserved, "score", score)
+            "signal", hostInfo.Signal, "score", score)
     }
 
     return int64(score), nil
@@ -104,25 +133,25 @@ func signalScorer(signal float64) int64 {
 }
 
 // extractSignalFromNode reads a numeric signal from a Node label.
-func extractSignalFromNode(node *v1.Node) float64 {
-    if val, ok := node.Annotations["pronto/signal"]; ok {
-        if f, err := strconv.ParseFloat(val, 64); err == nil {
-            return f
-        }
-    }
-    return 0
-}
-
+//func extractSignalFromNode(node *v1.Node) float64 {
+    //if val, ok := node.Annotations["pronto/signal"]; ok {
+        //if f, err := strconv.ParseFloat(val, 64); err == nil {
+            //return f
+        //}
+    //}
+    //return 0
+//}
+//
 // extractSignalFromNode reads a numeric signal from a Node label.
-func extractPodCostFromNode(node *v1.Node) float64 {
-    if val, ok := node.Annotations["pronto/pod-cost"]; ok {
-        if f, err := strconv.ParseFloat(val, 64); err == nil {
-            return f
-        }
-    }
-    return 0.1
-}
-
+//func extractCapacityFromNode(node *v1.Node) float64 {
+    //if val, ok := node.Annotations["pronto/pod-cost"]; ok {
+        //if f, err := strconv.ParseFloat(val, 64); err == nil {
+            //return f
+        //}
+    //}
+    //return 0.1
+//}
+//
 func (pl *ProntoPlugin) ScoreExtensions() framework.ScoreExtensions {
     return pl
 }
@@ -163,6 +192,7 @@ func (pl *ProntoPlugin) Reserve(
     pod *v1.Pod,
     nodeName string,
 ) *framework.Status {
+    logger := klog.FromContext(klog.NewContext(ctx, pl.logger)).WithValues("ExtensionPoint", "Reserve")
     nodeInfo, err := pl.handle.SnapshotSharedLister().NodeInfos().Get(nodeName)
     if err != nil {
         return framework.NewStatus(framework.Error, fmt.Sprintf("getting node %q from Snapshot: %v", nodeName, err))
@@ -173,8 +203,17 @@ func (pl *ProntoPlugin) Reserve(
 		return framework.NewStatus(framework.Error, "node not found")
 	}
 
-    reserved := extractPodCostFromNode(node)
-    pl.ReservePod(pod.Name, node.Name, reserved)
+    oversat, err := state.Read(framework.StateKey(nodeName))
+    if err != nil {
+        return framework.NewStatus(framework.Error, "node info missing")
+    }
+
+    if logger.V(10).Enabled() {
+        logger.Info("Pronto Signal", "Node Name", node.Name, "OverSaturated", oversat.(*BooleanState).val)
+    }
+
+    //pl.ReservePod(pod.Name, nodeName, oversat.(*BooleanState).val)
+    pl.ReservePod(pod.Name, nodeName, false)
 
     return framework.NewStatus(framework.Success, "")
 }
@@ -187,21 +226,29 @@ func (pl *ProntoPlugin) Unreserve(
     nodeName string,
 ) {
     pl.UnReservePod(pod.Name, nodeName)
+    pl.UnOverReservePod(pod.Name, nodeName)
 }
 
 func (pl *ProntoPlugin) onPodUpdate(oldObj, newObj interface{}) {
     oldPod := oldObj.(*v1.Pod)
     newPod := newObj.(*v1.Pod)
 
-    oldRunning := oldPod.Status.Phase == v1.PodRunning
-    newRunning := newPod.Status.Phase == v1.PodRunning
+    //oldRunning := oldPod.Status.Phase == v1.PodPending
+    newPending := newPod.Status.Phase == v1.PodPending
 
     // Only consider pods that have a node assigned
     nodeName := newPod.Spec.NodeName
-    newPodName := newPod.Name
 
     // Entered Running
-    if !oldRunning && newRunning && nodeName != "" {
-        pl.UnReservePod(newPodName, nodeName)
+    if !newPending && nodeName != "" {
+        pl.UnReservePod(oldPod.Name, nodeName)
     }
+}
+func (pl *ProntoPlugin) onPodDelete(obj interface{}) {
+    pod := obj.(*v1.Pod)
+    // Only consider pods that have a node assigned
+    nodeName := pod.Spec.NodeName
+
+    pl.UnReservePod(pod.Name, nodeName)
+    pl.UnOverReservePod(pod.Name, nodeName)
 }

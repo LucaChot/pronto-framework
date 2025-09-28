@@ -36,7 +36,7 @@ spec:
       - command:
         - ./sched
         - --config=/etc/kubernetes/pronto/pronto-config.yaml
-          #- --v=10
+        - --v=10
         name: pronto
         resources:
           requests:
